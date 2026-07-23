@@ -1,0 +1,16 @@
+{
+  "name": "DiskDhobi",
+  "version": "1.0.0",
+  "description": "Local DiskDhobi — scan and delete heavy folders on Linux",
+  "main": "main/main.js",
+  "scripts": {
+    "start": "bash launch.sh",
+    "dev": "bash launch.sh --dev"
+  },
+  "devDependencies": {
+    "electron": "^43.2.0"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "MIT"
+}

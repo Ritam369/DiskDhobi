@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <!-- CSP: no remote resources, no inline scripts beyond what we load explicitly -->
+  <meta http-equiv="Content-Security-Policy"
+    content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:;" />
+  <title>DiskDhobi</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+  <!-- ═══════════════════════════════════════════════════════ TOP BAR ══ -->
+  <header class="topbar">
+    <div class="topbar-brand">
+      <span class="brand-icon">🗄</span>
+      <span class="brand-name">DiskDhobi</span>
+    </div>
+
+    <div class="topbar-controls">
+      <div class="folder-picker-group">
+        <button id="btn-pick-folder" class="btn btn-secondary" title="Choose root folder to scan">
+          📁 Choose Folder
+        </button>
+        <span id="selected-path" class="selected-path" title="">No folder selected</span>
+      </div>
+
+      <button id="btn-scan" class="btn btn-primary" disabled>
+        <span id="scan-btn-label">Scan</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- ═════════════════════════════════════════════════ DANGER WARNING ══ -->
+  <div id="danger-warning" class="danger-banner hidden" role="alert" aria-live="assertive">
+    <span class="danger-icon">⚠️</span>
+    <span id="danger-message"></span>
+    <button id="btn-dismiss-danger" class="btn btn-ghost btn-sm" aria-label="Dismiss warning">✕</button>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════ SCAN PROGRESS ══ -->
+  <div id="progress-bar-track" class="progress-track hidden" role="progressbar" aria-valuemin="0" aria-valuemax="100">
+    <div id="progress-bar-fill" class="progress-fill"></div>
+  </div>
+
+  <div id="progress-status" class="progress-status hidden" aria-live="polite">
+    <span class="spinner" aria-hidden="true"></span>
+    <span id="progress-text">Scanning…</span>
+    <button id="btn-cancel-scan" class="btn btn-ghost btn-sm">Cancel</button>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════ MAIN AREA ══ -->
+  <main class="main-content">
+
+    <!-- ── Empty / idle state ─────────────────────────────────────────── -->
+    <div id="view-idle" class="view-idle">
+      <div class="idle-graphic">🔍</div>
+      <p class="idle-title">Nothing scanned yet</p>
+      <p class="idle-sub">Choose a folder and click <strong>Scan</strong> to find reclaimable storage.</p>
+    </div>
+
+    <!-- ── Skipped paths notice (shown after scan if any) ────────────── -->
+    <div id="skipped-notice" class="skipped-notice hidden" aria-live="polite">
+      <span>⚠️</span>
+      <span id="skipped-text"></span>
+      <button id="btn-show-skipped" class="btn btn-ghost btn-sm">Show details</button>
+    </div>
+
+    <!-- ── Results section ───────────────────────────────────────────── -->
+    <section id="view-results" class="view-results hidden">
+
+      <!-- Toolbar: filters + sort -->
+      <div class="results-toolbar" role="toolbar" aria-label="Filter and sort results">
+        <div class="filter-group">
+          <label for="filter-category" class="sr-only">Filter by category</label>
+          <select id="filter-category" class="select-control" aria-label="Filter by category">
+            <option value="all">All categories</option>
+            <option value="dependency">Dependencies</option>
+            <option value="cache">Cache</option>
+            <option value="large-file">Large Files</option>
+          </select>
+
+          <label for="filter-search" class="sr-only">Search paths</label>
+          <input id="filter-search" type="search" class="input-control" placeholder="Filter paths…"
+            aria-label="Filter paths by text" />
+        </div>
+
+        <div class="sort-group">
+          <label for="sort-by" class="sr-only">Sort by</label>
+          <select id="sort-by" class="select-control" aria-label="Sort results">
+            <option value="size-desc">Largest first</option>
+            <option value="size-asc">Smallest first</option>
+            <option value="name-asc">Name A–Z</option>
+            <option value="name-desc">Name Z–A</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- Select-all controls per category -->
+      <div class="category-select-bar" role="group" aria-label="Bulk selection">
+        <button class="btn btn-ghost btn-sm" data-action="select-all">Select all</button>
+        <button class="btn btn-ghost btn-sm" data-action="deselect-all">Deselect all</button>
+        <button class="btn btn-ghost btn-sm" data-category="dependency" data-action="select-cat">
+          Select all dependencies
+        </button>
+        <button class="btn btn-ghost btn-sm" data-category="cache" data-action="select-cat">
+          Select all cache
+        </button>
+        <button class="btn btn-ghost btn-sm" data-category="large-file" data-action="select-cat">
+          Select all large files
+        </button>
+      </div>
+
+      <!-- Results table -->
+      <div class="table-wrapper" role="region" aria-label="Scan results">
+        <table class="results-table" aria-live="polite">
+          <thead>
+            <tr>
+              <th class="col-check" scope="col">
+                <input type="checkbox" id="check-all-header" aria-label="Select all visible items" />
+              </th>
+              <th class="col-path" scope="col">Path</th>
+              <th class="col-category" scope="col">Category</th>
+              <th class="col-type" scope="col">Type</th>
+              <th class="col-size" scope="col">
+                <button class="sort-btn active sort-desc" data-sort="size" aria-label="Sort by size">
+                  Size <span class="sort-arrow" aria-hidden="true">↓</span>
+                </button>
+              </th>
+            </tr>
+          </thead>
+          <tbody id="results-tbody">
+            <!-- Rows injected by renderer.js -->
+          </tbody>
+        </table>
+        <div id="no-results-msg" class="no-results hidden">
+          No items match the current filter.
+        </div>
+      </div>
+    </section>
+
+    <!-- ── Post-deletion result screen ──────────────────────────────── -->
+    <section id="view-result-summary" class="view-result-summary hidden" aria-live="polite">
+      <div class="result-summary-card">
+        <div class="result-icon" id="result-icon">✅</div>
+        <h2 id="result-headline">Deletion complete</h2>
+        <p id="result-sub"></p>
+        <div class="result-stats">
+          <div class="result-stat">
+            <span class="stat-label">Space freed</span>
+            <span class="stat-value" id="stat-freed">—</span>
+          </div>
+          <div class="result-stat">
+            <span class="stat-label">Items deleted</span>
+            <span class="stat-value" id="stat-deleted">—</span>
+          </div>
+          <div class="result-stat">
+            <span class="stat-label">Failures</span>
+            <span class="stat-value" id="stat-failures">—</span>
+          </div>
+        </div>
+
+        <!-- Failure list (hidden if zero failures) -->
+        <details id="failure-details" class="failure-details hidden">
+          <summary>Show failures</summary>
+          <ul id="failure-list" class="failure-list"></ul>
+        </details>
+
+        <button id="btn-scan-again" class="btn btn-primary mt-l">Scan Again</button>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- ═══════════════════════════════════════════════════════ BOTTOM BAR ══ -->
+  <footer class="summary-bar" id="summary-bar">
+    <div class="summary-stats">
+      <span class="summary-item">
+        <span class="summary-label">Found</span>
+        <span class="summary-value" id="sum-found">0 items</span>
+      </span>
+      <span class="summary-sep">·</span>
+      <span class="summary-item">
+        <span class="summary-label">Reclaimable total</span>
+        <span class="summary-value" id="sum-reclaimable">0 B</span>
+      </span>
+      <span class="summary-sep">·</span>
+      <span class="summary-item selected-summary">
+        <span class="summary-label">Selected</span>
+        <span class="summary-value highlight" id="sum-selected">0 B across 0 items</span>
+      </span>
+    </div>
+
+    <button id="btn-delete" class="btn btn-danger" disabled aria-disabled="true">
+      Delete Selected
+    </button>
+  </footer>
+
+  <!-- ═══════════════════════════════════════════════════════════ MODALS ══ -->
+
+  <!-- ── Skipped paths detail modal ─────────────────────────────────── -->
+  <div id="modal-skipped" class="modal-overlay hidden" role="dialog" aria-modal="true"
+    aria-labelledby="skipped-modal-title" aria-describedby="skipped-modal-desc">
+    <div class="modal-box modal-box--med">
+      <div class="modal-header">
+        <h2 id="skipped-modal-title">Skipped Paths</h2>
+        <button class="btn btn-ghost modal-close" data-modal="modal-skipped" aria-label="Close">✕</button>
+      </div>
+      <p id="skipped-modal-desc" class="modal-sub">
+        These paths could not be accessed (permission denied or other error).
+      </p>
+      <ul id="skipped-modal-list" class="skipped-list"></ul>
+    </div>
+  </div>
+
+  <!-- ── Dry-run / confirm delete modal ─────────────────────────────── -->
+  <div id="modal-confirm" class="modal-overlay hidden" role="dialog" aria-modal="true"
+    aria-labelledby="confirm-modal-title" aria-describedby="confirm-modal-desc">
+    <div class="modal-box modal-box--lg">
+      <div class="modal-header">
+        <h2 id="confirm-modal-title">⚠️ Confirm Permanent Deletion</h2>
+        <button class="btn btn-ghost modal-close" data-modal="modal-confirm" aria-label="Close">✕</button>
+      </div>
+
+      <p id="confirm-modal-desc" class="modal-sub modal-warning">
+        The following paths will be <strong>permanently deleted</strong>. This cannot be undone.
+        There is no recycle bin.
+      </p>
+
+      <div class="confirm-summary">
+        <span>Total to delete: </span>
+        <strong id="confirm-total-size">—</strong>
+        <span> across </span>
+        <strong id="confirm-item-count">—</strong>
+        <span> items</span>
+      </div>
+
+      <div class="confirm-path-list-wrap">
+        <ul id="confirm-path-list" class="confirm-path-list"></ul>
+      </div>
+
+      <div class="modal-actions">
+        <button id="btn-cancel-confirm" class="btn btn-secondary btn-lg">
+          Cancel — keep my files
+        </button>
+        <!-- Deliberately not the default-focus button; user must click explicitly -->
+        <button id="btn-confirm-delete" class="btn btn-danger btn-lg">
+          🗑 Confirm Delete
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Trap focus / close modals on Escape -->
+  <script src="renderer.js"></script>
+</body>
+</html>

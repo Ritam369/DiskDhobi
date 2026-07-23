@@ -1,0 +1,38 @@
+{
+  "sizeThresholdBytes": 104857600,
+
+  "dependencyFolders": [
+    "node_modules",
+    ".venv",
+    "venv",
+    "target",
+    "vendor"
+  ],
+
+  "cacheFolders": [
+    ".cache",
+    "__pycache__",
+    ".npm",
+    ".pnpm-store",
+    "dist",
+    "build",
+    "out",
+    ".next/cache",
+    ".yarn/cache"
+  ],
+
+  "dangerousRoots": [
+    "/",
+    "/home",
+    "/usr",
+    "/etc",
+    "/var",
+    "/tmp",
+    "/bin",
+    "/sbin",
+    "/lib",
+    "/lib64",
+    "/opt",
+    "/root"
+  ]
+}
