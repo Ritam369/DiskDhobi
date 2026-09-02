@@ -32,13 +32,6 @@
     </div>
   </header>
 
-  <!-- ═════════════════════════════════════════════════ DANGER WARNING ══ -->
-  <div id="danger-warning" class="danger-banner hidden" role="alert" aria-live="assertive">
-    <span class="danger-icon">⚠️</span>
-    <span id="danger-message"></span>
-    <button id="btn-dismiss-danger" class="btn btn-ghost btn-sm" aria-label="Dismiss warning">✕</button>
-  </div>
-
   <!-- ═══════════════════════════════════════════════════ SCAN PROGRESS ══ -->
   <div id="progress-bar-track" class="progress-track hidden" role="progressbar" aria-valuemin="0" aria-valuemax="100">
     <div id="progress-bar-fill" class="progress-fill"></div>
@@ -211,6 +204,25 @@
         These paths could not be accessed (permission denied or other error).
       </p>
       <ul id="skipped-modal-list" class="skipped-list"></ul>
+    </div>
+  </div>
+
+  <!-- ── Dangerous path blocking modal ────────────────────────────── -->
+  <div id="modal-danger" class="modal-overlay hidden" role="alertdialog" aria-modal="true"
+    aria-labelledby="danger-modal-title" aria-describedby="danger-modal-message">
+    <div class="modal-box modal-box--danger">
+      <div class="danger-modal-icon" aria-hidden="true">🚫</div>
+      <h2 id="danger-modal-title" class="danger-modal-title">Protected Path</h2>
+      <p id="danger-modal-message" class="danger-modal-message"></p>
+      <p class="danger-modal-hint">
+        Scanning system or home root directories could expose critical files to accidental deletion.
+        Please choose a safer, more specific folder.
+      </p>
+      <div class="modal-actions modal-actions--centered">
+        <button id="btn-danger-reselect" class="btn btn-primary btn-lg">
+          📁 Select Another Path
+        </button>
+      </div>
     </div>
   </div>
 

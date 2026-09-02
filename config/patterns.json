@@ -23,16 +23,23 @@
 
   "dangerousRoots": [
     "/",
-    "/home",
-    "/usr",
-    "/etc",
-    "/var",
-    "/tmp",
     "/bin",
-    "/sbin",
+    "/boot",
+    "/dev",
+    "/etc",
     "/lib",
     "/lib64",
+    "/lost+found",
+    "/nix",
     "/opt",
-    "/root"
+    "/proc",
+    "/root",
+    "/run",
+    "/srv",
+    "/sys",
+    "/tmp",
+    "/usr",
+    "/var",
+    "/run/media/ritam/3E2258732258325F"
   ]
 }

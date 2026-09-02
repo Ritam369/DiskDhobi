@@ -19,9 +19,9 @@ const btnScan           = $('btn-scan');
 const scanBtnLabel      = $('scan-btn-label');
 const selectedPathEl    = $('selected-path');
 
-const dangerWarning     = $('danger-warning');
-const dangerMessage     = $('danger-message');
-const btnDismissDanger  = $('btn-dismiss-danger');
+const dangerModal       = $('modal-danger');
+const dangerModalMsg    = $('danger-modal-message');
+const btnDangerReselect = $('btn-danger-reselect');
 
 const progressTrack     = $('progress-bar-track');
 const progressFill      = $('progress-bar-fill');
@@ -145,23 +145,33 @@ function setScanning(active) {
 
 btnPickFolder.addEventListener('click', async () => {
   const result = await window.api.selectFolder();
-  if (!result) return;
-
-  state.rootPath = result.path;
-  selectedPathEl.textContent = result.path;
-  selectedPathEl.title = result.path;
-  btnScan.disabled = false;
+  if (!result) return; // user cancelled the picker
 
   if (result.dangerous) {
-    dangerMessage.textContent = result.reason;
-    dangerWarning.classList.remove('hidden');
+    // Dangerous path — do NOT commit it to state, show blocking modal.
+    // The previously selected (safe) path, if any, remains in state.rootPath.
+    btnScan.disabled = !state.rootPath; // keep Scan enabled only if a safe path was already chosen
+    selectedPathEl.textContent = result.path;
+    selectedPathEl.title = result.path;
+    dangerModalMsg.textContent = result.reason;
+    openModal(dangerModal);
   } else {
-    dangerWarning.classList.add('hidden');
+    state.rootPath = result.path;
+    selectedPathEl.textContent = result.path;
+    selectedPathEl.title = result.path;
+    btnScan.disabled = false;
   }
 });
 
-btnDismissDanger.addEventListener('click', () => {
-  dangerWarning.classList.add('hidden');
+// "Select Another Path" inside the danger modal re-opens the folder picker.
+btnDangerReselect.addEventListener('click', async () => {
+  closeModal(dangerModal);
+  // Restore the display to whatever safe path was previously selected (if any).
+  selectedPathEl.textContent = state.rootPath || 'No folder selected';
+  selectedPathEl.title = state.rootPath || '';
+  btnScan.disabled = !state.rootPath;
+  // Re-trigger the folder picker immediately so the user can pick a safe path.
+  btnPickFolder.click();
 });
 
 // ── Scan ──────────────────────────────────────────────────────────────────
@@ -223,7 +233,17 @@ async function startScan() {
     })
   );
 
-  await window.api.startScan(state.rootPath);
+  const scanResult = await window.api.startScan(state.rootPath);
+
+  // Main process blocked the scan (dangerous path that slipped past the modal).
+  if (scanResult && scanResult.blocked) {
+    setScanning(false);
+    dangerModalMsg.textContent = scanResult.reason;
+    openModal(dangerModal);
+    state.rootPath = null;
+    selectedPathEl.textContent = 'No folder selected';
+    selectedPathEl.title = '';
+  }
 }
 
 function finishScan() {

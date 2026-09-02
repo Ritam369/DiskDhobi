@@ -3,7 +3,6 @@
 const fs = require('fs');
 const path = require('path');
 const { execFile } = require('child_process');
-const os = require('os');
 
 // Load detection config. Resolved relative to the project root so it works
 // whether we run from source or from an asar archive.
@@ -89,9 +88,10 @@ function matchDirectory(dirPath, config) {
  * Primary scan function.
  *
  * @param {string} rootPath   - Absolute path chosen by the user.
- * @param {object} options    - { onProgress(stats), onItem(item) }
+ * @param {object} options    - { onProgress(stats), onItem(item), signal }
  *   onProgress is called periodically with { scanned, found, currentPath }
  *   onItem     is called once per detected heavy item
+ *   signal     is an object { cancelled: false } — set .cancelled = true to abort
  *
  * @returns {Promise<{ items: Item[], skipped: string[] }>}
  *   items   – array of { id, path, category, sizeBytes, type }
@@ -99,7 +99,7 @@ function matchDirectory(dirPath, config) {
  */
 async function scan(rootPath, options = {}) {
   const config = loadConfig();
-  const { onProgress = () => {}, onItem = () => {} } = options;
+  const { onProgress = () => {}, onItem = () => {}, signal = { cancelled: false } } = options;
 
   const items = [];
   const skipped = [];
@@ -130,10 +130,13 @@ async function scan(rootPath, options = {}) {
 
   /**
    * Recursive directory walker.
-   * We use an iterative BFS-style queue to avoid stack overflows on very
-   * deep trees and to keep the logic straightforward.
+   * Checks signal.cancelled at each entry so cancellation stops the walk
+   * immediately, not just the IPC reporting.
    */
   async function walk(dir) {
+    // Stop immediately if cancelled.
+    if (signal.cancelled) return;
+
     let entries;
     try {
       entries = fs.readdirSync(dir, { withFileTypes: true });
@@ -143,6 +146,9 @@ async function scan(rootPath, options = {}) {
     }
 
     for (const entry of entries) {
+      // Check cancellation at every entry — this is what makes it truly responsive.
+      if (signal.cancelled) return;
+
       const fullPath = path.join(dir, entry.name);
       scannedCount++;
       lastProgressPath = fullPath;
@@ -191,6 +197,7 @@ async function scan(rootPath, options = {}) {
         if (matched) {
           // Measure without recursing into it.
           const sizeBytes = await duBytes(fullPath);
+          if (signal.cancelled) return; // du may take a moment — re-check after await
           const item = {
             id: nextId(),
             path: fullPath,
@@ -248,28 +255,38 @@ async function scan(rootPath, options = {}) {
 
 /**
  * Check whether a root path is "dangerous" (too broad).
- * Returns { dangerous: bool, reason: string | null }
+ * Blocks both exact matches AND any sub-path that descends from a dangerous root.
+ * Returns { dangerous: bool, reason: string | null, matchedRoot: string | null }
  */
 function checkDangerousRoot(rootPath) {
   const config = loadConfig();
   const norm = path.resolve(rootPath);
-  const homeDir = os.homedir();
 
-  if (config.dangerousRoots.includes(norm)) {
-    return {
-      dangerous: true,
-      reason: `"${norm}" is a system root. Scanning here could touch critical files.`,
-    };
+  // Check against every dangerous root — exact match OR descendant.
+  for (const dangerRoot of config.dangerousRoots) {
+    const normDanger = path.resolve(dangerRoot);
+
+    // Exact match: the selected path IS the dangerous root.
+    if (norm === normDanger) {
+      return {
+        dangerous: true,
+        matchedRoot: normDanger,
+        reason: `"${norm}" is a protected system path. Scanning here could touch critical files.`,
+      };
+    }
+
+    // Descendant match: the selected path lives inside a dangerous root.
+    // Use path.sep suffix so "/homes/foo" doesn't falsely match "/home".
+    if (norm.startsWith(normDanger + path.sep)) {
+      return {
+        dangerous: true,
+        matchedRoot: normDanger,
+        reason: `"${norm}" is inside the protected path "${normDanger}". Pick a folder outside protected system directories.`,
+      };
+    }
   }
 
-  if (norm === homeDir) {
-    return {
-      dangerous: true,
-      reason: `"${norm}" is your entire home directory. Pick a more specific subfolder.`,
-    };
-  }
-
-  return { dangerous: false, reason: null };
+  return { dangerous: false, reason: null, matchedRoot: null };
 }
 
 module.exports = { scan, checkDangerousRoot, loadConfig };

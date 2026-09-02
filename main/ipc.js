@@ -43,30 +43,38 @@ function registerHandlers(mainWindow) {
   // ── scan:start ─────────────────────────────────────────────────────────
   ipcMain.handle('scan:start', async (_event, { rootPath }) => {
     if (activeScan) {
-      // A scan is already running — ignore duplicate requests.
       return { alreadyRunning: true };
     }
 
-    let cancelled = false;
+    // Defence-in-depth: re-validate even if the renderer somehow let it through.
+    const { dangerous, reason } = checkDangerousRoot(rootPath);
+    if (dangerous) {
+      return { blocked: true, reason };
+    }
+
+    // activeScan doubles as the cancellation signal passed into scan().
+    // Setting activeScan.cancelled = true stops the walk at the next entry.
     activeScan = { cancelled: false };
 
     try {
       const result = await scan(rootPath, {
+        signal: activeScan,
         onProgress(stats) {
-          if (cancelled) return;
+          if (activeScan && activeScan.cancelled) return;
           if (!mainWindow.isDestroyed()) {
             mainWindow.webContents.send('scan:progress', stats);
           }
         },
         onItem(item) {
-          if (cancelled) return;
+          if (activeScan && activeScan.cancelled) return;
           if (!mainWindow.isDestroyed()) {
             mainWindow.webContents.send('scan:item', item);
           }
         },
       });
 
-      if (!mainWindow.isDestroyed()) {
+      // Only send scan:complete if we weren't cancelled mid-way.
+      if (!activeScan?.cancelled && !mainWindow.isDestroyed()) {
         mainWindow.webContents.send('scan:complete', {
           items: result.items,
           skipped: result.skipped,
@@ -88,7 +96,9 @@ function registerHandlers(mainWindow) {
   ipcMain.handle('scan:cancel', async () => {
     if (activeScan) {
       activeScan.cancelled = true;
-      activeScan = null;
+      // Don't null out activeScan here — scan:start's finally block does that
+      // after the walk unwinds. This prevents a race where a new scan starts
+      // before the old walk has fully exited.
     }
     return {};
   });
